@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>彩色粒子文字特效</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000000;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        
+        canvas {
+            display: block;
+            cursor: pointer;
+        }
+        
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            color: #aaa;
+            font-size: 14px;
+            text-align: center;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="particleCanvas"></canvas>
+    <div class="instructions">点击文字查看粒子爆炸效果</div>
+
+    <script>
+        // 获取canvas元素和上下文
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 设置canvas大小为窗口大小
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        
+        // 初始化canvas大小
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // 粒子类
+        class Particle {
+            constructor(x, y, targetX, targetY, color) {
+                this.x = x;
+                this.y = y;
+                this.originalX = x;
+                this.originalY = y;
+                this.targetX = targetX;
+                this.targetY = targetY;
+                this.size = Math.random() * 1.5 + 1.2;
+                this.color = color;
+                this.speedX = 0;
+                this.speedY = 0;
+                this.resetSpeed = 0.08; // 返回原始位置的速度
+                this.exploded = false;
+                this.vx = 0;
+                this.vy = 0;
+                this.friction = 0.92;
+                this.ease = 0.05;
+            }
+            
+            // 更新粒子位置
+            update() {
+                if (this.exploded) {
+                    // 爆炸状态：向外飞散后逐渐返回原始位置
+                    this.vx *= this.friction;
+                    this.vy *= this.friction;
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    
+                    // 检查速度是否足够小，开始返回原始位置
+                    const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                    if (speed < 0.1) {
+                        // 逐渐返回原始位置
+                        const dx = this.originalX - this.x;
+                        const dy = this.originalY - this.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        
+                        if (distance < 1.5) {
+                            this.x = this.originalX;
+                            this.y = this.originalY;
+                            this.exploded = false;
+                            this.vx = 0;
+                            this.vy = 0;
+                        } else {
+                            this.x += dx * this.ease;
+                            this.y += dy * this.ease;
+                        }
+                    }
+                } else {
+                    // 正常状态：保持在目标位置
+                    const dx = this.targetX - this.x;
+                    const dy = this.targetY - this.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance > 0.5) {
+                        this.x += dx * this.resetSpeed;
+                        this.y += dy * this.resetSpeed;
+                    }
+                }
+            }
+            
+            // 绘制粒子
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+            
+            // 爆炸效果
+            explode(mouseX, mouseY) {
+                if (!this.exploded) {
+                    this.exploded = true;
+                    
+                    // 计算从点击点到粒子的向量
+                    const dx = this.x - mouseX;
+                    const dy = this.y - mouseY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    // 设置飞散速度，距离点击点越近的粒子飞得越快
+                    const force = Math.min(5 + (100 - distance) * 0.1, 15);
+                    const angle = Math.atan2(dy, dx);
+                    
+                    this.vx = Math.cos(angle) * force;
+                    this.vy = Math.sin(angle) * force;
+                }
+            }
+        }
+        
+        // 文字粒子系统
+        class TextParticleEffect {
+            constructor(text, fontSize = 60) {
+                this.text = text;
+                this.fontSize = fontSize;
+                this.particles = [];
+                this.centerX = canvas.width / 2;
+                this.centerY = canvas.height / 2;
+                this.textWidth = 0;
+                this.textHeight = 0;
+                this.generateParticles();
+            }
+            
+            // 生成粒子
+            generateParticles() {
+                // 清空现有粒子
+                this.particles = [];
+                
+                // 创建一个隐藏的canvas用于测量文字
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.font = `${this.fontSize}px Arial`;
+                this.textWidth = tempCtx.measureText(this.text).width;
+                this.textHeight = this.fontSize;
+                
+                // 计算文字起始位置，使其居中
+                const startX = this.centerX - this.textWidth / 2;
+                const startY = this.centerY + this.textHeight / 3; // 调整垂直位置
+                
+                // 重新调整临时canvas以确保文字完整显示
+                tempCanvas.width = this.textWidth + 40; // 增加一些边距
+                tempCanvas.height = this.textHeight + 40;
+                
+                // 设置文字样式
+                tempCtx.font = `${this.fontSize}px Arial`;
+                tempCtx.fillStyle = '#FFFFFF';
+                tempCtx.textAlign = 'center'; // 设置为中心对齐，以便居中绘制
+                tempCtx.textBaseline = 'middle';
+                
+                // 在临时canvas上绘制文字
+                tempCtx.fillText(this.text, tempCanvas.width / 2, tempCanvas.height / 2);
+                
+                // 获取文字像素数据
+                const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                const data = imageData.data;
+                
+                // 根据像素数据生成粒子
+                const particleDensity = 4; // 粒子密度，值越大性能越好，但效果可能变差
+                for (let y = 0; y < tempCanvas.height; y += particleDensity) {
+                    for (let x = 0; x < tempCanvas.width; x += particleDensity) {
+                        const index = (y * tempCanvas.width + x) * 4;
+                        const alpha = data[index + 3];
+                        
+                        // 如果像素不透明，则在此位置创建粒子
+                        if (alpha > 100) {
+                            // 随机生成粒子颜色
+                            const hue = Math.floor(Math.random() * 360);
+                            const saturation = 80 + Math.floor(Math.random() * 20);
+                            const lightness = 50 + Math.floor(Math.random() * 20);
+                            const color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                            
+                            // 添加一些白色和淡色粒子以增强文字清晰度
+                            const rand = Math.random();
+                            let finalColor;
+                            if (rand > 0.85) {
+                                finalColor = '#FFFFFF'; // 白色
+                            } else if (rand > 0.7) {
+                                finalColor = `hsl(${hue}, ${saturation}%, 70%)`; // 淡色
+                            } else {
+                                finalColor = color;
+                            }
+                            
+                            // 调整坐标到实际画布位置
+                            const particleX = startX + x - (tempCanvas.width - this.textWidth) / 2;
+                            const particleY = startY - this.textHeight / 2 + y - (tempCanvas.height - this.textHeight) / 2;
+                            
+                            // 添加随机偏移使文字不那么规整
+                            const offsetX = (Math.random() - 0.5) * 0.5;
+                            const offsetY = (Math.random() - 0.5) * 0.5;
+                            
+                            const particle = new Particle(
+                                particleX + offsetX,
+                                particleY + offsetY,
+                                particleX + offsetX,
+                                particleY + offsetY,
+                                finalColor
+                            );
+                            this.particles.push(particle);
+                        }
+                    }
+                }
+            }
+            
+            // 更新所有粒子
+            update() {
+                this.particles.forEach(particle => particle.update());
+            }
+            
+            // 绘制所有粒子
+            draw() {
+                this.particles.forEach(particle => particle.draw());
+            }
+            
+            // 爆炸效果
+            explode(mouseX, mouseY) {
+                // 计算点击点到文字中心的距离
+                const distanceToCenter = Math.sqrt(Math.pow(mouseX - textEffect.centerX, 2) + Math.pow(mouseY - textEffect.centerY, 2));
+                
+                // 如果点击在文字范围内
+                if (distanceToCenter < Math.max(textEffect.textWidth, textEffect.textHeight) / 1.2) {
+                    this.particles.forEach(particle => {
+                        // 计算粒子到点击点的距离
+                        const distance = Math.sqrt(Math.pow(particle.x - mouseX, 2) + Math.pow(particle.y - mouseY, 2));
+                        
+                        // 根据距离设置爆炸强度，距离越近爆炸越强
+                        if (distance < 200) { // 点击点半径200像素范围内的粒子爆炸
+                            particle.explode(mouseX, mouseY);
+                        }
+                    });
+                }
+            }
+        }
+        
+        // 创建文字粒子效果实例
+        const textEffect = new TextParticleEffect('林奕璇是大懒猪', 70);
+        
+        // 动画循环
+        function animate() {
+            // 清空画布
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 更新和绘制粒子
+            textEffect.update();
+            textEffect.draw();
+            
+            // 继续动画循环
+            requestAnimationFrame(animate);
+        }
+        
+        // 启动动画
+        animate();
+        
+        // 处理点击事件
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            textEffect.explode(mouseX, mouseY);
+        });
+        
+        // 处理触摸事件（移动端兼容）
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const touch = e.touches[0];
+            const mouseX = touch.clientX - rect.left;
+            const mouseY = touch.clientY - rect.top;
+            
+            textEffect.explode(mouseX, mouseY);
+        });
+    </script>
+</body>
+</html>
